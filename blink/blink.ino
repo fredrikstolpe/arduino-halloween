@@ -28,36 +28,34 @@ void setup() {
   Serial.begin(9600); 
 //  led1.blink(1000);
 //  led2.fadeTo(255, 1, &fadeUpCallback);
+    ledAdvance(led1, led1Timer);
 }
 
 void loop() {
-  if (!led1.isFading && !led1.isBlinking && !led1Timer.isRunning){
-    led1Advance();
-  }
   led1.doWork();
   led2.doWork();
   led1Timer.doWork();
 }
 
-void led1Advance(){
+void ledAdvance(CBLed& led, CBTimer& timer){
   Animation a = led1sequence[led1CurrentPosition];
   if (a.effect == effectOn){
-    led1.on();
-    led1Timer.setTimeout(a.duration, &led1Callback);
+    led.on();
+    timer.setTimeout(a.duration, &led1Callback);
   }
   else if (a.effect == effectOff){
-    led1.off();
-    led1Timer.setTimeout(a.duration, &led1Callback);
+    led.off();
+    timer.setTimeout(a.duration, &led1Callback);
   }
   else if (a.effect == effectFadeup){
-    led1.fadeTo(255, a.speedOrDelay, &led1Callback);
+    led.fadeTo(255, a.speedOrDelay, &led1Callback);
   }
   else if (a.effect == effectFadedown){
-    led1.fadeTo(0, a.speedOrDelay, &led1Callback);
+    led.fadeTo(0, a.speedOrDelay, &led1Callback);
   }
   else if (a.effect == effectBlink){
-    led1.blink(a.speedOrDelay);
-    led1Timer.setTimeout(a.duration, &led1Callback);
+    led.blink(a.speedOrDelay);
+    timer.setTimeout(a.duration, &led1Callback);
   }
   led1CurrentPosition++;
   if (led1CurrentPosition == sizeof(led1sequence)/sizeof(led1sequence[0])){
@@ -66,7 +64,7 @@ void led1Advance(){
 }
 
 void led1Callback(){
-  led1Advance();
+  ledAdvance(led1, led1Timer);
 }
 
 void fadeUpCallback(){
