@@ -6,7 +6,7 @@
   
   * Arduino Uno
   * Adafruit Wave Shield 1.0
-  * HC-SR04 Ultrasonic sensor
+  * PIR motion sensor
   * Red leds (with a few hundres ohms resistor) for eyes
   * (White leds / PIR sensor)
 
@@ -19,8 +19,8 @@
   4 Wave shield DI
   5 Wave shield LAT
   6 LED eyes
-  7 Ultrasonic sensor trig
-  8 Ultrasonic sensor echo
+  7 PIR input
+  8 
   9 (White leds or PIR sensor)
   10 Wave shield CCS
   11 Wave shield SD card
@@ -33,22 +33,12 @@
 
 #include <WaveHC.h>
 #include <WaveUtil.h>
-#include <NewPing.h>
 #include "CBLed.h"
 
-#define TRIGGER_PIN 7
-#define ECHO_PIN 8
-#define MAX_DISTANCE 400
-
+#define PIR_PIN 7
 #define LED_PIN 6
 
-#define MAX_DISTANCE 300
-const int DISTANCE_CLOSE = round(MAX_DISTANCE/3);
-const int DISTANCE_NEAR = round((MAX_DISTANCE/3)*2);
-
 CBLed led1 = CBLed(LED_PIN);
-
-NewPing sonar(TRIGGER_PIN, ECHO_PIN, MAX_DISTANCE);
 
 SdReader card;
 FatVolume vol;
@@ -56,17 +46,11 @@ FatReader root;
 WaveHC wave;
 FatReader f;
 
-char *farSamples[1] = { "KOMLEK1.WAV" };
-char *nearSamples[5] = { "KOMLEK2.WAV", "KOMLEK3.WAV", "REV1.WAV", "TYCKER1.WAV", "TYCKER2.WAV" };
-char *closeSamples[9] = { "KOMLEK3.WAV", "KOMLEK4.WAV", "REV1.WAV", "REV2.WAV", "SKRATT1.WAV", "SKRATT2.WAV", "TYCKER1.WAV", "TYCKER2.WAV", "TYCKER3.WAV"  };
-
+char *farSamples[2] = { "KOMLEK1.WAV", "TYCKER1.WAV" };
+char *closeSamples[10] = { "KOMLEK2.WAV", "KOMLEK3.WAV", "KOMLEK4.WAV", "REV1.WAV", "REV2.WAV", "SKRATT1.WAV", "SKRATT2.WAV", "TYCKER1.WAV", "TYCKER2.WAV", "TYCKER3.WAV"  };
 
 void setup() {
   Serial.begin(9600);
-  Serial.print("CLOSE = ");
-  Serial.println(DISTANCE_CLOSE);
-  Serial.print("NEAR = ");
-  Serial.println(DISTANCE_NEAR);
   card.init();
   card.partialBlockRead(true);
   uint8_t part;
@@ -75,19 +59,24 @@ void setup() {
       break;
   }
   root.openRoot(vol);
+  pinMode(PIR_PIN, INPUT);
 }
 
 void loop() {
-  int distance = sonar.ping_cm();
-  bool isClose = (distance < DISTANCE_CLOSE);
-  bool isNear = (!isClose && distance < DISTANCE_NEAR);
-  bool isFar = (!isClose && !isNear);
+
+  bool isFar = true;
+  bool isNear = false;
+  bool isClose = false;
+  
+  if (digitalRead(PIR_PIN) == HIGH){
+    isClose = true;
+    isNear = false;
+    isFar = false;
+  }
+ 
   if (!wave.isplaying){
     if (isClose){
       playfile(getCloseSample());
-    }
-    else if (isNear){
-      playfile(getNearSample());
     }
     else{
       playfile(getFarSample());
@@ -98,19 +87,12 @@ void loop() {
   //Serial.println("cm");
   delay(50);
   if (isClose){
-    led1.setIntensity(200);
-    Serial.print("CLOSE ");
-    Serial.println(sonar.ping_cm());
-  }
-  else if (isNear){
-    led1.setIntensity(70);
-    Serial.print("NEAR ");
-    Serial.println(sonar.ping_cm());
+    led1.setIntensity(150);
+    Serial.println("CLOSE ");
   }
   else {
-    led1.setIntensity(30);
-    Serial.print("FAR ");
-    Serial.println(sonar.ping_cm());
+    led1.setIntensity(10);
+    Serial.println("FAR ");
   }
 }
 
@@ -118,12 +100,8 @@ char* getCloseSample(){
   return closeSamples[random (0, 9)];
 }
 
-char* getNearSample(){
-  return nearSamples[random (0, 5)];
-}
-
 char* getFarSample(){
-  return farSamples[0];
+  return farSamples[random (0, 1)];
 }
 
 
