@@ -8,7 +8,7 @@
   * Adafruit Wave Shield 1.0
   * PIR motion sensor
   * Red leds (with a few hundres ohms resistor) for eyes
-  * (White leds / PIR sensor)
+  * (White leds)
 
   Pinout:
 
@@ -21,24 +21,24 @@
   6 LED eyes
   7 PIR input
   8 
-  9 (White leds or PIR sensor)
+  9 (White leds)
   10 Wave shield CCS
   11 Wave shield SD card
   12 Wave shield SD card
   13 Wave shield SD card
-  GND Ultrasonic sensor ground
-  GND LED cathode
   
 */
 
 #include <WaveHC.h>
 #include <WaveUtil.h>
 #include "CBLed.h"
+#include "CBTimer.h"
+#include "CBPir.h"
+//#include <Servo.h> //This can be needed for some reason when compiling
 
-#define PIR_PIN 7
-#define LED_PIN 6
-
-CBLed led1 = CBLed(LED_PIN);
+CBLed led1 = CBLed(6);
+CBTimer timer1 = CBTimer();
+CBPir pir1 = CBPir(7, &pirCallback);
 
 SdReader card;
 FatVolume vol;
@@ -46,11 +46,37 @@ FatReader root;
 WaveHC wave;
 FatReader f;
 
-char *farSamples[2] = { "KOMLEK1.WAV", "TYCKER1.WAV" };
+#define effectOn 0
+#define effectOff 1
+#define effectFadeup 2
+#define effectFadedown 3
+#define effectBlink 4
+
+char *farSamples[3] = { "KOMLEK1.WAV", "KOMLEK2.WAV", "TYCKER1.WAV" };
 char *closeSamples[10] = { "KOMLEK2.WAV", "KOMLEK3.WAV", "KOMLEK4.WAV", "REV1.WAV", "REV2.WAV", "SKRATT1.WAV", "SKRATT2.WAV", "TYCKER1.WAV", "TYCKER2.WAV", "TYCKER3.WAV"  };
+
+bool animationRunning;
+bool isNear;
+
+int currentSequencePosition = 0;
+
+//Doll sequence in calm mode
+void (*calmSequence[5])(){
+  eyesFadeUpSlow,
+  eyesOn,
+  eyesFadeDownSlow,
+  eyesOff,
+  saySomething
+};
 
 void setup() {
   Serial.begin(9600);
+  initCard();
+  sequenceAdvance();
+}
+
+//Init wave shield memory card
+void initCard(){
   card.init();
   card.partialBlockRead(true);
   uint8_t part;
@@ -59,53 +85,25 @@ void setup() {
       break;
   }
   root.openRoot(vol);
-  pinMode(PIR_PIN, INPUT);
 }
 
 void loop() {
+  led1.doWork();
+  timer1.doWork();
+  pir1.doWork();
+}
 
-  bool isFar = true;
-  bool isNear = false;
-  bool isClose = false;
-  
-  if (digitalRead(PIR_PIN) == HIGH){
-    isClose = true;
+//Movement started or stopped
+void pirCallback(CBPir* pir){
+  if (pir->movement){
+    isNear = true;
+  }
+  else{
     isNear = false;
-    isFar = false;
-  }
- 
-  if (!wave.isplaying){
-    if (isClose){
-      playfile(getCloseSample());
-    }
-    else{
-      playfile(getFarSample());
-    }
-  }
-  
-  //Serial.print(sonar.ping_cm());
-  //Serial.println("cm");
-  delay(50);
-  if (isClose){
-    led1.setIntensity(150);
-    Serial.println("CLOSE ");
-  }
-  else {
-    led1.setIntensity(10);
-    Serial.println("FAR ");
   }
 }
 
-char* getCloseSample(){
-  return closeSamples[random (0, 9)];
-}
-
-char* getFarSample(){
-  return farSamples[random (0, 1)];
-}
-
-
-
+//Play a sound file from memory card
 void playfile(char *name) {
   if (wave.isplaying) {
     wave.stop();
@@ -113,6 +111,52 @@ void playfile(char *name) {
   f.open(root, name);
   wave.create(f);
   wave.play();
+}
+
+//Move one step in the sequence
+void sequenceAdvance(){
+  int currentPosition = currentSequencePosition;
+  currentSequencePosition++;
+  if (currentSequencePosition == sizeof(calmSequence)/sizeof(calmSequence[0])){
+    currentSequencePosition = 0;
+  }
+  (*calmSequence[currentSequencePosition])();
+}
+
+void eyesFadeUpSlow(){
+  Serial.println("fus");
+  led1.fadeTo(20, 1, sequenceAdvance);
+}
+
+void eyesOn(){
+  Serial.println("on");
+  led1.setIntensity(20);
+  timer1.setTimeout(3000, sequenceAdvance);
+}
+
+void eyesFadeDownSlow(){
+  Serial.println("fd");
+  led1.fadeTo(1, 1, sequenceAdvance);
+}
+
+void eyesOff(){
+  Serial.println("off");
+  led1.setIntensity(1);
+  timer1.setTimeout(3000, sequenceAdvance);
+}
+
+void saySomething(){
+  Serial.println("say");
+  playfile(getRandomFarSample());
+  sequenceAdvance();
+}
+
+char* getRandomCloseSample(){
+  return closeSamples[random (0, 9)];
+}
+
+char* getRandomFarSample(){
+  return farSamples[random (0, 3)];
 }
 
 
