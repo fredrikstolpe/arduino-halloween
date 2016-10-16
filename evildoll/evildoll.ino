@@ -29,6 +29,8 @@
   
 */
 
+//Todo: !movement never occurs because of timer - fix
+
 #include <WaveHC.h>
 #include <WaveUtil.h>
 #include "CBLed.h"
@@ -46,33 +48,38 @@ FatReader root;
 WaveHC wave;
 FatReader f;
 
-#define effectOn 0
-#define effectOff 1
-#define effectFadeup 2
-#define effectFadedown 3
-#define effectBlink 4
+char *calmSamples[3] = { "KOMLEK1.WAV", "KOMLEK2.WAV", "TYCKER1.WAV" };
+char *upsetSamples[10] = { "SKRATT1.WAV", "KOMLEK3.WAV", "KOMLEK4.WAV", "REV1.WAV", "REV2.WAV", "SKRATT1.WAV", "SKRATT2.WAV", "REV2.WAV", "TYCKER2.WAV", "TYCKER3.WAV"  };
 
-char *farSamples[3] = { "KOMLEK1.WAV", "KOMLEK2.WAV", "TYCKER1.WAV" };
-char *closeSamples[10] = { "KOMLEK2.WAV", "KOMLEK3.WAV", "KOMLEK4.WAV", "REV1.WAV", "REV2.WAV", "SKRATT1.WAV", "SKRATT2.WAV", "TYCKER1.WAV", "TYCKER2.WAV", "TYCKER3.WAV"  };
+bool movement;
+bool isUpset;
+bool stateChanged;
+unsigned long lastMovementTime;
 
-bool animationRunning;
-bool isNear;
-
-int currentSequencePosition = 0;
+int currentSequencePosition = -1;
 
 //Doll sequence in calm mode
 void (*calmSequence[5])(){
-  eyesFadeUpSlow,
-  eyesOn,
-  eyesFadeDownSlow,
-  eyesOff,
-  saySomething
+  calmEyesFadeUp,
+  calmEyesLit,
+  calmEyesFadeDown,
+  calmEyesLow,
+  calmSpeak
+};
+
+void (*upsetSequence[6])(){
+  upsetEyesOff,
+  upsetSpeak,
+  upsetEyesFadeUp,
+  upsetEyesLit,
+  upsetEyesBlink,
+  upsetEyesFadeDown
 };
 
 void setup() {
   Serial.begin(9600);
   initCard();
-  sequenceAdvance();
+  doAnimation();
 }
 
 //Init wave shield memory card
@@ -87,76 +94,154 @@ void initCard(){
   root.openRoot(vol);
 }
 
+//Play a sound file from memory card
+void playfile(char *name) {
+  if (wave.isplaying) {
+    return;
+    //wave.stop();
+  }
+  Serial.print("Playing ");
+  Serial.println(name);
+  f.open(root, name);
+  wave.create(f);
+  wave.play();
+}
+
+char* getRandomUpsetSample(){
+  return upsetSamples[random (0, 9)];
+}
+
+char* getRandomCalmSample(){
+  return calmSamples[random (0, 3)];
+}
+
 void loop() {
   led1.doWork();
   timer1.doWork();
   pir1.doWork();
 }
 
-//Movement started or stopped
+//PIR sensor callback - movement started or stopped
 void pirCallback(CBPir* pir){
   if (pir->movement){
-    isNear = true;
+    lastMovementTime = millis();
   }
-  else{
-    isNear = false;
+  if (!stateChanged){
+    if (pir->movement){
+      Serial.println("PIR - movement");
+      movement = true;
+      if (!isUpset){
+        Serial.println("State changed");
+        stateChanged = true;
+      }
+    }
+    else{
+      Serial.println("PIR - no movement");
+      movement = false;
+      if (timeElapsed(lastMovementTime, 10000)){
+        Serial.println("Time had elapsed");
+        if (isUpset){
+          Serial.println("State changed");
+          stateChanged = true;
+        }
+      }else{
+        Serial.println("Time had not elapsed");
+      }
+    }
   }
 }
 
-//Play a sound file from memory card
-void playfile(char *name) {
-  if (wave.isplaying) {
-    wave.stop();
-  }
-  f.open(root, name);
-  wave.create(f);
-  wave.play();
+bool timeElapsed(unsigned long since, int amount){
+  return ((millis() - since) > amount);
 }
 
 //Move one step in the sequence
-void sequenceAdvance(){
-  int currentPosition = currentSequencePosition;
-  currentSequencePosition++;
-  if (currentSequencePosition == sizeof(calmSequence)/sizeof(calmSequence[0])){
-    currentSequencePosition = 0;
+void doAnimation(){
+  if (stateChanged){
+    Serial.println("Do animation state changed");
+    isUpset = !isUpset;
+    Serial.print("Is upset: ");
+    Serial.println(isUpset);
+    currentSequencePosition = -1;
+    stateChanged = false;
+    if (isUpset){
+      wave.stop();
+    }
   }
-  (*calmSequence[currentSequencePosition])();
+  currentSequencePosition++;
+  if (isUpset){
+    if (currentSequencePosition == sizeof(upsetSequence)/sizeof(upsetSequence[0])){
+      currentSequencePosition = 0;
+    }
+    (*upsetSequence[currentSequencePosition])();
+  }
+  else{
+    if (currentSequencePosition == sizeof(calmSequence)/sizeof(calmSequence[0])){
+      currentSequencePosition = 0;
+    }
+    (*calmSequence[currentSequencePosition])();
+  }
 }
 
-void eyesFadeUpSlow(){
-  Serial.println("fus");
-  led1.fadeTo(20, 1, sequenceAdvance);
+void calmEyesFadeUp(){
+  led1.fadeTo(20, 1, doAnimation);
 }
 
-void eyesOn(){
-  Serial.println("on");
+void calmEyesLit(){
   led1.setIntensity(20);
-  timer1.setTimeout(3000, sequenceAdvance);
+  timer1.setTimeout(3000, doAnimation);
 }
 
-void eyesFadeDownSlow(){
-  Serial.println("fd");
-  led1.fadeTo(1, 1, sequenceAdvance);
+void calmEyesFadeDown(){
+  led1.fadeTo(1, 1, doAnimation);
 }
 
-void eyesOff(){
-  Serial.println("off");
+void calmEyesLow(){
   led1.setIntensity(1);
-  timer1.setTimeout(3000, sequenceAdvance);
+  timer1.setTimeout(3000, doAnimation);
 }
 
-void saySomething(){
-  Serial.println("say");
-  playfile(getRandomFarSample());
-  sequenceAdvance();
+void calmSpeak(){
+  playfile(getRandomCalmSample());
+  doAnimation();
 }
 
-char* getRandomCloseSample(){
-  return closeSamples[random (0, 9)];
+//UPSET
+
+void upsetEyesOff(){
+  playfile(getRandomUpsetSample());
+  led1.setIntensity(0);
+  timer1.setTimeout(500, doAnimation);
 }
 
-char* getRandomFarSample(){
-  return farSamples[random (0, 3)];
+void upsetSpeak(){
+  playfile(getRandomUpsetSample());
+  doAnimation();
 }
+
+void upsetEyesFadeUp(){
+  playfile(getRandomUpsetSample());
+  led1.fadeTo(120, 2, doAnimation);
+}
+
+void upsetEyesLit(){
+  playfile(getRandomUpsetSample());
+  led1.setIntensity(0);
+  timer1.setTimeout(500, doAnimation);
+}
+
+void upsetEyesBlink(){
+  playfile(getRandomUpsetSample());
+  led1.blink(100);
+  timer1.setTimeout(2000, doAnimation);
+}
+
+void upsetEyesFadeDown(){
+  playfile(getRandomUpsetSample());
+  led1.setIntensity(150);
+  led1.fadeTo(1, 5, doAnimation);
+}
+
+
 
 
