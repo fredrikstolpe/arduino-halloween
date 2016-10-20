@@ -41,6 +41,7 @@
 CBLed led1 = CBLed(6);
 CBTimer timer1 = CBTimer();
 CBPir pir1 = CBPir(7, &pirCallback);
+CBTimer movementTimer = CBTimer();
 
 SdReader card;
 FatVolume vol;
@@ -51,10 +52,8 @@ FatReader f;
 char *calmSamples[3] = { "KOMLEK1.WAV", "KOMLEK2.WAV", "TYCKER1.WAV" };
 char *upsetSamples[10] = { "SKRATT1.WAV", "KOMLEK3.WAV", "KOMLEK4.WAV", "REV1.WAV", "REV2.WAV", "SKRATT1.WAV", "SKRATT2.WAV", "REV2.WAV", "TYCKER2.WAV", "TYCKER3.WAV"  };
 
-bool movement;
 bool isUpset;
 bool stateChanged;
-unsigned long lastMovementTime;
 
 int currentSequencePosition = -1;
 
@@ -119,36 +118,29 @@ void loop() {
   led1.doWork();
   timer1.doWork();
   pir1.doWork();
+  movementTimer.doWork();
 }
 
 //PIR sensor callback - movement started or stopped
 void pirCallback(CBPir* pir){
-  if (pir->movement){
-    lastMovementTime = millis();
-  }
   if (!stateChanged){
     if (pir->movement){
       Serial.println("PIR - movement");
-      movement = true;
+      movementTimer.clear();
       if (!isUpset){
         Serial.println("State changed");
         stateChanged = true;
       }
-    }
-    else{
-      Serial.println("PIR - no movement");
-      movement = false;
-      if (timeElapsed(lastMovementTime, 10000)){
-        Serial.println("Time had elapsed");
-        if (isUpset){
-          Serial.println("State changed");
-          stateChanged = true;
-        }
-      }else{
-        Serial.println("Time had not elapsed");
-      }
+    }else{
+      Serial.println("No movement");
+      movementTimer.setTimeout(10000, movementStopped);
     }
   }
+}
+
+void movementStopped(){
+  Serial.println("Movement stopped");
+  stateChanged = true;
 }
 
 bool timeElapsed(unsigned long since, int amount){
@@ -221,25 +213,25 @@ void upsetSpeak(){
 
 void upsetEyesFadeUp(){
   playfile(getRandomUpsetSample());
-  led1.fadeTo(120, 2, doAnimation);
+  led1.fadeTo(120, 5, doAnimation);
 }
 
 void upsetEyesLit(){
   playfile(getRandomUpsetSample());
-  led1.setIntensity(0);
-  timer1.setTimeout(500, doAnimation);
+  led1.setIntensity(120);
+  timer1.setTimeout(1000, doAnimation);
 }
 
 void upsetEyesBlink(){
   playfile(getRandomUpsetSample());
-  led1.blink(100);
-  timer1.setTimeout(2000, doAnimation);
+  led1.blink(50);
+  timer1.setTimeout(1000, doAnimation);
 }
 
 void upsetEyesFadeDown(){
   playfile(getRandomUpsetSample());
   led1.setIntensity(150);
-  led1.fadeTo(1, 5, doAnimation);
+  led1.fadeTo(1, 10, doAnimation);
 }
 
 
