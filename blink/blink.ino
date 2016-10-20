@@ -1,85 +1,81 @@
 #include <Servo.h>
 #include "CBLed.h"
 #include "CBTimer.h"
-#include "animation.cpp"
-
-#define effectOn 0
-#define effectOff 1
-#define effectFadeup 2
-#define effectFadedown 3
-#define effectBlink 4
 
 CBLed led1 = CBLed(6);
 CBLed led2 = CBLed(9);
-CBTimer led1Timer = CBTimer();
-CBTimer led2Timer = CBTimer();
+CBTimer timer1 = CBTimer();
+CBTimer timer2 = CBTimer();
+int sequencePosition1;
+int sequencePosition2;
 
-Animation led1sequence [5] = {
-   Animation(0, 5, effectFadeup),
-   Animation(0, 1, effectFadedown),
-   Animation(2000, 0, effectOff),
-   Animation(2000, 200, effectBlink),
-   Animation(2000, 0, effectOff)
+void (*sequence1[4])(){
+  led1FadeUp,
+  led1On,
+  led1FadeDown,
+  led1Off
 };
 
-int led1CurrentPosition;
+void (*sequence2[2])(){
+  led2Off,
+  led2Blink
+};
 
 void setup() {
-  Serial.begin(9600); 
-//  led1.blink(1000);
-//  led2.fadeTo(255, 1, &fadeUpCallback);
-    ledAdvance(led1, led1Timer);
+  Serial.begin(9600);
+  doLed1Animation();
+  doLed2Animation();
 }
 
 void loop() {
   led1.doWork();
   led2.doWork();
-  led1Timer.doWork();
+  timer1.doWork();
+  timer2.doWork();
 }
 
-void ledAdvance(CBLed& led, CBTimer& timer){
-  Animation a = led1sequence[led1CurrentPosition];
-  if (a.effect == effectOn){
-    led.on();
-    timer.setTimeout(a.duration, &led1Callback);
+void doLed1Animation(){
+  sequencePosition1++;
+  if (sequencePosition1 == sizeof(sequence1)/sizeof(sequence1[0])){
+    sequencePosition1 = 0;
   }
-  else if (a.effect == effectOff){
-    led.off();
-    timer.setTimeout(a.duration, &led1Callback);
-  }
-  else if (a.effect == effectFadeup){
-    led.fadeTo(255, a.speedOrDelay, &led1Callback);
-  }
-  else if (a.effect == effectFadedown){
-    led.fadeTo(0, a.speedOrDelay, &led1Callback);
-  }
-  else if (a.effect == effectBlink){
-    led.blink(a.speedOrDelay);
-    timer.setTimeout(a.duration, &led1Callback);
-  }
-  led1CurrentPosition++;
-  if (led1CurrentPosition == sizeof(led1sequence)/sizeof(led1sequence[0])){
-    led1CurrentPosition = 0;
-  }
+  (*sequence1[sequencePosition1])();
 }
 
-void led1Callback(){
-  ledAdvance(led1, led1Timer);
+void doLed2Animation(){
+  sequencePosition2++;
+  if (sequencePosition2 == sizeof(sequence2)/sizeof(sequence2[0])){
+    sequencePosition2 = 0;
+  }
+  (*sequence2[sequencePosition2])();
 }
 
-void fadeUpCallback(){
-  led2.fadeTo(0, 5, &fadeDownCallback);
+void led1FadeUp(){
+  led1.fadeTo(255, 1, doLed1Animation);
 }
 
-void fadeDownCallback(){
-  led1Timer.setTimeout(2000, &timerCallback);
+void led1FadeDown(){
+  led1.fadeTo(0, 1, doLed1Animation);
 }
 
-void timerCallback(){
-  led2.blink(200);
-  led1Timer.setTimeout(2000, &blinkCallback);
+void led1On(){
+  led1.on();
+  timer1.setTimeout(2000, doLed1Animation);
 }
 
-void blinkCallback(){
-  led2.fadeTo(255, 5, &fadeUpCallback);
+void led1Off(){
+  led1.off();
+  timer1.setTimeout(2000, doLed1Animation);
 }
+
+void led2Off(){
+  led2.off();
+  timer2.setTimeout(2000, doLed2Animation);
+}
+
+void led2Blink(){
+  led2.blink(100);
+  timer2.setTimeout(1000, doLed2Animation);
+}
+
+
